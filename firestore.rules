@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - phone: string (required)
+    //   - balance: number (required)
+    //   - isActive: boolean (required)
+    //   - accountType: string (optional)
+    //   - role: string (optional, enum: ['admin', 'user'])
+    //
+    // Collection: transactions
+    // Document ID: {transactionId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - type: string (required, enum: ['Recharge', 'Bill Pay', 'Transfer', 'Add Balance'])
+    //   - amount: number (required)
+    //   - date: string (required)
+    //   - status: string (required, enum: ['Success', 'Pending', 'Failed'])
+    //   - description: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "mdmahid4336@gmail.com" ||
+         request.auth.token.email == "01920544401@mahid.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'balance', 'isActive']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.phone is string && data.phone.size() >= 10 && data.phone.size() <= 15 &&
+             data.balance is number &&
+             data.isActive is bool;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'userId', 'type', 'amount', 'date', 'status']) &&
+             data.id is string &&
+             data.userId is string &&
+             data.type in ['Recharge', 'Bill Pay', 'Transfer', 'Add Balance'] &&
+             data.amount is number && data.amount >= 0 &&
+             data.date is string &&
+             data.status in ['Success', 'Pending', 'Failed'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /users/{userId} {
+      // Allow 'get' for everyone to support login fallback for manual entries.
+      allow get: if true; 
+      
+      allow list: if isAdmin();
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data) && 
+                      (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
