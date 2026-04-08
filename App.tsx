@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Home, User, Smartphone, History, PlusCircle, CreditCard, Send, LogOut, MessageSquare, Share2, Download, ShieldCheck, ChevronRight, KeyRound, AlertCircle, CheckCircle, Edit2 } from 'lucide-react';
-import { AppView, User as UserType, Transaction } from './types';
-import { APP_NAME, WHATSAPP_LINK, APK_DOWNLOAD_URL } from './constants';
+import { AppView, User as UserType, Transaction, Notice } from './types';
+import { APP_NAME, WHATSAPP_LINK, APK_DOWNLOAD_URL, HELPLINE_WHATSAPP, APP_LOGO } from './constants';
 import { auth, db } from './firebase';
 import { 
   createUserWithEmailAndPassword, 
@@ -101,6 +101,7 @@ import EditProfile from './views/EditProfile';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>('login');
+  const [rechargeTab, setRechargeTab] = useState<'online' | 'offline'>('online');
   const [user, setUser] = useState<UserType | null>(null);
   const userRef = React.useRef<UserType | null>(null);
   
@@ -113,6 +114,14 @@ const App: React.FC = () => {
   const [pendingSignUp, setPendingSignUp] = useState<{ name: string, phone: string, accountType: string, fee: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [settings, setSettings] = useState({
+    apkDownloadUrl: APK_DOWNLOAD_URL,
+    whatsappLink: WHATSAPP_LINK,
+    helplineNumber: HELPLINE_WHATSAPP,
+    appName: APP_NAME,
+    appLogo: APP_LOGO
+  });
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     // If it's a permission error, make it more user-friendly
@@ -136,6 +145,35 @@ const App: React.FC = () => {
       }
     };
     testConnection();
+  }, []);
+
+  // Listen for global settings and notices
+  useEffect(() => {
+    // Listen for notice
+    const unsubscribeNotice = onSnapshot(doc(db, 'notices', 'current'), (snap) => {
+      if (snap.exists()) {
+        setNotice(snap.data() as Notice);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'notices/current'));
+
+    // Listen for global settings
+    const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setSettings({
+          apkDownloadUrl: data.apkDownloadUrl || APK_DOWNLOAD_URL,
+          whatsappLink: data.whatsappLink || WHATSAPP_LINK,
+          helplineNumber: data.helplineNumber || HELPLINE_WHATSAPP,
+          appName: data.appName || APP_NAME,
+          appLogo: data.appLogo || APP_LOGO
+        });
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'settings/global'));
+
+    return () => {
+      unsubscribeNotice();
+      unsubscribeSettings();
+    };
   }, []);
 
   // Listen for Auth state changes
@@ -165,7 +203,10 @@ const App: React.FC = () => {
             }
           }
           setIsLoading(false);
-        }, (error) => handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`));
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+          setIsLoading(false);
+        });
 
         // Real-time history
         const q = query(
@@ -177,7 +218,9 @@ const App: React.FC = () => {
         unsubscribeHistory = onSnapshot(q, (snapshot) => {
           const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
           setHistory(txs);
-        }, (error) => handleFirestoreError(error, OperationType.LIST, 'transactions'));
+        }, (error) => {
+          handleFirestoreError(error, OperationType.LIST, 'transactions');
+        });
 
       } else {
         console.log("Auth state changed: User logged out");
@@ -196,19 +239,6 @@ const App: React.FC = () => {
       if (unsubscribeHistory) unsubscribeHistory();
     };
   }, []);
-
-  // Listen for user data updates (balance, etc.)
-  useEffect(() => {
-    if (!user?.id) return;
-    
-    const unsubscribe = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
-      if (docSnap.exists()) {
-        setUser(docSnap.data() as UserType);
-      }
-    }, (error) => handleFirestoreError(error, OperationType.GET, `users/${user.id}`));
-
-    return () => unsubscribe();
-  }, [user?.id]);
 
   const handleLogin = async (phoneInput: string, passwordInput?: string, pinInput?: string) => {
     try {
@@ -454,12 +484,26 @@ const App: React.FC = () => {
   const handlePaymentSuccess = async () => {
     if (user) {
       try {
-        const updatedUser = { ...user, isActive: true };
+        // Create a transaction record for the registration fee
+        const txId = Math.random().toString(36).substr(2, 9).toUpperCase();
+        const regTx: Transaction = {
+          id: txId,
+          userId: user.id,
+          type: 'Add Balance',
+          amount: pendingSignUp?.fee || 0,
+          date: new Date().toISOString(),
+          status: 'Pending',
+          description: `Registration Fee - ${user.accountType}`
+        };
+        await setDoc(doc(db, 'transactions', txId), regTx);
+
         await updateDoc(doc(db, 'users', user.id), { isActive: true });
-        setUser(updatedUser);
+        setUser({ ...user, isActive: true });
         setView('home');
+        showToast("Payment Submitted! Your account is now active.");
       } catch (error) {
         console.error("Error activating account:", error);
+        showToast("Failed to process activation.", "error");
       }
     }
   };
@@ -472,6 +516,12 @@ const App: React.FC = () => {
 
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'date' | 'status'>) => {
     if (!user) return;
+
+    // Balance check for deductions
+    if (tx.type !== 'Add Balance' && user.balance < tx.amount) {
+      showToast("Insufficient balance for this transaction.", 'error');
+      return;
+    }
 
     const txId = Math.random().toString(36).substr(2, 9).toUpperCase();
     const newTx: Transaction = {
@@ -518,8 +568,8 @@ const App: React.FC = () => {
 
     switch (view) {
       case 'admin-dashboard': return <AdminDashboard onLogout={handleLogout} showToast={showToast} />;
-      case 'home': return <HomeView user={user!} setView={setView} handleShare={handleShare} onLogout={handleLogout} />;
-      case 'recharge': return <MobileRecharge onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'home': return <HomeView user={user!} setView={setView} setRechargeTab={setRechargeTab} handleShare={handleShare} onLogout={handleLogout} showToast={showToast} />;
+      case 'recharge': return <MobileRecharge initialTab={rechargeTab} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
       case 'add-balance': return <AddBalance onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
       case 'bill-pay': return <BillPay onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
       case 'transfer': return <BalanceTransfer onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
@@ -551,7 +601,12 @@ const App: React.FC = () => {
       case 'change-pin': return <ChangePin onBack={() => setView('profile')} showToast={showToast} />;
       case 'change-password': return <ChangePassword onBack={() => setView('profile')} showToast={showToast} />;
       case 'privacy-policy': return <PrivacyPolicy onBack={() => setView(user ? 'profile' : 'login')} />;
-      case 'api-key': return <ApiKey onBack={() => setView('profile')} showToast={showToast} />;
+      case 'api-key': 
+        if (user?.role !== 'admin') {
+          setView('profile');
+          return null;
+        }
+        return <ApiKey onBack={() => setView('profile')} showToast={showToast} />;
       case 'my-device': return <MyDevice onBack={() => setView('profile')} showToast={showToast} />;
       case 'edit-profile': return <EditProfile user={user!} onBack={() => setView('profile')} showToast={showToast} />;
       case 'history': return (
@@ -642,15 +697,17 @@ const App: React.FC = () => {
                 </div>
                 <ChevronRight size={18} className="text-gray-300" />
               </button>
-              <button onClick={() => setView('api-key')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
-                    <KeyRound size={18} />
+              {user?.role === 'admin' && (
+                <button onClick={() => setView('api-key')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
+                      <KeyRound size={18} />
+                    </div>
+                    <span className="font-medium text-sm">API Key Configuration</span>
                   </div>
-                  <span className="font-medium text-sm">API Key Configuration</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
+                  <ChevronRight size={18} className="text-gray-300" />
+                </button>
+              )}
               <button onClick={() => setView('my-device')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
                 <div className="flex items-center gap-3">
                   <div className="bg-green-100 p-2 rounded-lg text-green-600">
@@ -663,7 +720,16 @@ const App: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => window.open(APK_DOWNLOAD_URL)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100">
+              <button 
+                onClick={() => {
+                  if (!settings.apkDownloadUrl) {
+                    showToast("APK link is not yet configured. Please contact admin.", "error");
+                  } else {
+                    window.open(settings.apkDownloadUrl);
+                  }
+                }} 
+                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100"
+              >
                 <div className="flex items-center gap-3">
                   <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
                     <Download size={18} />
@@ -681,7 +747,7 @@ const App: React.FC = () => {
                 </div>
                 <ChevronRight size={18} className="text-gray-300" />
               </button>
-              <button onClick={() => window.open(WHATSAPP_LINK)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
+              <button onClick={() => window.open(settings.whatsappLink)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
                 <div className="flex items-center gap-3">
                   <div className="bg-green-50 p-2 rounded-lg text-green-600">
                     <MessageSquare size={18} />
@@ -699,7 +765,7 @@ const App: React.FC = () => {
           </div>
         </div>
       );
-      default: return <HomeView user={user!} setView={setView} handleShare={handleShare} onLogout={handleLogout} />;
+      default: return <HomeView user={user!} setView={setView} setRechargeTab={setRechargeTab} handleShare={handleShare} onLogout={handleLogout} showToast={showToast} notice={notice} settings={settings} />;
     }
   };
 
@@ -713,7 +779,7 @@ const App: React.FC = () => {
               <div className="bg-white/20 p-2 rounded-lg">
                 <Smartphone size={20} />
               </div>
-              <h1 className="text-lg font-bold tracking-tight">{APP_NAME}</h1>
+              <h1 className="text-lg font-bold tracking-tight">{settings.appName}</h1>
             </div>
             <button onClick={() => setView('profile')} className="p-1 border-2 border-white/30 rounded-full overflow-hidden w-8 h-8 flex items-center justify-center">
               {user?.photoURL ? (
@@ -735,8 +801,10 @@ const App: React.FC = () => {
       <main className="animate-in fade-in duration-300">
         {isLoading ? (
           <div className="min-h-screen flex flex-col items-center justify-center bg-blue-700 text-white">
-            <Smartphone size={60} className="animate-bounce mb-4" />
-            <h1 className="text-2xl font-bold animate-pulse">{APP_NAME}</h1>
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-xl overflow-hidden">
+              <img src={settings.appLogo} alt={settings.appName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            </div>
+            <h1 className="text-2xl font-bold animate-pulse">{settings.appName}</h1>
           </div>
         ) : renderView()}
       </main>

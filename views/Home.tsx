@@ -1,21 +1,49 @@
 
-import React, { useState } from 'react';
-import { AppView, User as UserType } from '../types';
-import { Smartphone, PlusCircle, CreditCard, Send, Share2, MessageSquare, Download, ChevronRight, Bell, Eye, EyeOff, Zap, Landmark, Building2, UserPlus, History, ShieldCheck, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AppView, User as UserType, Notice } from '../types';
+import { Smartphone, PlusCircle, CreditCard, Send, Share2, MessageSquare, Download, ChevronRight, Bell, Eye, EyeOff, Zap, Landmark, Building2, UserPlus, History, ShieldCheck, LogOut, Megaphone, PhoneCall } from 'lucide-react';
 import { APK_DOWNLOAD_URL, WHATSAPP_LINK } from '../constants';
+import { db } from '../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface HomeViewProps {
   user: UserType;
   setView: (view: AppView) => void;
+  setRechargeTab: (tab: 'online' | 'offline') => void;
   handleShare: () => void;
   onLogout: () => void;
+  showToast: (msg: string, type?: 'success' | 'error') => void;
+  notice: Notice | null;
+  settings: {
+    apkDownloadUrl: string;
+    whatsappLink: string;
+    helplineNumber: string;
+    appName: string;
+    appLogo: string;
+  };
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ user, setView, handleShare, onLogout }) => {
+const HomeView: React.FC<HomeViewProps> = ({ user, setView, setRechargeTab, handleShare, onLogout, showToast, notice, settings }) => {
   const [showBalance, setShowBalance] = useState(false);
+  const [showSmartBanner, setShowSmartBanner] = useState(true);
+
+  const handleOpenApp = () => {
+    // Try to open the app using a custom URI scheme
+    // Fallback to the download URL if the app isn't installed
+    const appUri = "mahidtelecom://open"; // Replace with your app's custom scheme
+    window.location.href = appUri;
+    
+    setTimeout(() => {
+      // If the app doesn't open within 2 seconds, redirect to the download page
+      if (document.hasFocus()) {
+        window.open(settings.apkDownloadUrl, '_blank');
+      }
+    }, 2000);
+  };
 
   const features = [
     { icon: <Smartphone className="text-blue-600" />, label: 'Mobile Recharge', view: 'recharge' as AppView, color: 'bg-blue-50' },
+    { icon: <PhoneCall className="text-red-600" />, label: 'Offline Service', view: 'recharge' as AppView, color: 'bg-red-50', isOffline: true },
     { icon: <PlusCircle className="text-green-600" />, label: 'Auto Add Money', view: 'add-balance' as AppView, color: 'bg-green-50' },
     { icon: <Zap className="text-orange-600" />, label: 'Drive Packages', view: 'drive-packages' as AppView, color: 'bg-orange-50' },
     { icon: <Landmark className="text-purple-600" />, label: 'M-Banking', view: 'm-banking' as AppView, color: 'bg-purple-50' },
@@ -28,6 +56,35 @@ const HomeView: React.FC<HomeViewProps> = ({ user, setView, handleShare, onLogou
 
   return (
     <div className="animate-in slide-in-from-bottom-4 duration-500 p-4 space-y-6">
+      {/* Smart App Banner */}
+      {showSmartBanner && (
+        <div className="bg-indigo-600 text-white p-3 rounded-2xl flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-xl">
+              <Smartphone size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold">Open in Mahi Telecom App</p>
+              <p className="text-[10px] opacity-80">For a better experience</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleOpenApp}
+              className="bg-white text-indigo-600 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-indigo-50 transition-colors"
+            >
+              OPEN
+            </button>
+            <button 
+              onClick={() => setShowSmartBanner(false)}
+              className="p-1 opacity-60 hover:opacity-100"
+            >
+              <EyeOff size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Balance Card */}
       <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-10">
@@ -80,14 +137,33 @@ const HomeView: React.FC<HomeViewProps> = ({ user, setView, handleShare, onLogou
         </div>
       </div>
 
+      {/* Scrolling Notice */}
+      {notice && notice.isActive && (
+        <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 flex items-center gap-3 overflow-hidden">
+          <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600 shrink-0">
+            <Megaphone size={18} />
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <div className="whitespace-nowrap animate-marquee inline-block font-bold text-sm text-indigo-900">
+              {notice.message}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Feature Grid */}
       <div>
         <h3 className="text-lg font-bold text-gray-800 mb-4 px-1">Our Services</h3>
         <div className="grid grid-cols-3 gap-3">
-          {features.map((item, idx) => (
+          {features.map((item: any, idx) => (
             <button
               key={idx}
-              onClick={() => setView(item.view)}
+              onClick={() => {
+                if (item.view === 'recharge') {
+                  setRechargeTab(item.isOffline ? 'offline' : 'online');
+                }
+                setView(item.view);
+              }}
               className="flex flex-col items-center p-4 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all active:scale-95"
             >
               <div className={`${item.color} p-3 rounded-xl mb-2`}>
@@ -104,7 +180,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, setView, handleShare, onLogou
         <h3 className="text-lg font-bold text-gray-800 px-1">Quick Links</h3>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <button 
-            onClick={() => window.open(WHATSAPP_LINK)}
+            onClick={() => window.open(settings.whatsappLink)}
             className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100"
           >
             <div className="flex items-center gap-3">
@@ -136,7 +212,13 @@ const HomeView: React.FC<HomeViewProps> = ({ user, setView, handleShare, onLogou
           </button>
 
           <button 
-            onClick={() => window.open(APK_DOWNLOAD_URL)}
+            onClick={() => {
+              if (!settings.apkDownloadUrl) {
+                showToast("APK link is not yet configured. Please contact admin.", "error");
+              } else {
+                window.open(settings.apkDownloadUrl);
+              }
+            }}
             className="w-full flex items-center justify-between p-4 hover:bg-gray-50"
           >
             <div className="flex items-center gap-3">
@@ -159,7 +241,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, setView, handleShare, onLogou
         <div>
           <h4 className="text-sm font-bold text-yellow-800">Latest News</h4>
           <p className="text-xs text-yellow-700 leading-relaxed mt-1">
-            Welcome to Mahid Telecom! Enjoy 1% cashback on every 1000tk Add Balance via Nagad. Limited time offer!
+            Welcome to {settings.appName}! Now you can use our services offline by dialing *780# from your registered SIM.
           </p>
         </div>
       </div>

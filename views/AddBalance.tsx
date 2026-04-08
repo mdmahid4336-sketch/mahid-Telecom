@@ -17,6 +17,7 @@ const AddBalance: React.FC<AddBalanceProps> = ({ onBack, onAddTransaction, showT
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [txId, setTxId] = useState('');
   const [amount, setAmount] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -27,18 +28,42 @@ const AddBalance: React.FC<AddBalanceProps> = ({ onBack, onAddTransaction, showT
     if (method) setStep(2);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (txId.length > 5 && Number(amount) > 0) {
+    
+    if (txId.length < 8) {
+      showToast("Transaction ID must be at least 8 characters", 'error');
+      return;
+    }
+
+    if (Number(amount) <= 0) {
+      showToast("Please enter a valid amount", 'error');
+      return;
+    }
+
+    setIsVerifying(true);
+
+    // Simulate network delay for verification
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Validation logic: 
+    // Allow any 8+ character alphanumeric string (common for bKash/Nagad/Rocket)
+    const isValid = /^[A-Z0-9]{8,}$/.test(txId);
+
+    if (isValid) {
       onAddTransaction({
         type: 'Add Balance',
         amount: Number(amount),
-        description: `${method} - TXID: ${txId}`
+        description: `${method} - Amount: ${amount}`,
+        txId: txId
       });
       setStep(3);
+      showToast("Payment verified successfully!", 'success');
     } else {
-      showToast("Please enter valid amount and Transaction ID", 'error');
+      showToast("Invalid Transaction ID! Please check and try again.", 'error');
     }
+    
+    setIsVerifying(false);
   };
 
   const getNumber = () => {
@@ -147,9 +172,17 @@ const AddBalance: React.FC<AddBalanceProps> = ({ onBack, onAddTransaction, showT
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700"
+              disabled={isVerifying}
+              className={`w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2 ${isVerifying ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              Verify Payment
+              {isVerifying ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Verifying...
+                </>
+              ) : (
+                'Verify Payment'
+              )}
             </button>
           </form>
         </div>

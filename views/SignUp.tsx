@@ -179,16 +179,22 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUp, onGoToLogin, onGoToPrivacy, s
           </div>
 
           {/* 2. Mobile Number */}
-          <div className="relative">
-            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-green-600" size={20} />
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-              placeholder="Mobile number"
-              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-700 font-medium"
-              required
-            />
+          <div className="space-y-1">
+            <div className="relative">
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-green-600" size={20} />
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                placeholder="Mobile number"
+                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-700 font-medium"
+                required
+              />
+            </div>
+            <p className="text-[10px] text-orange-600 font-medium px-2 flex items-center gap-1">
+              <Smartphone size={10} />
+              রেজিস্ট্রেশনকৃত সিমটি অবশ্যই এই ফোনে থাকতে হবে (SIM must be in this phone)
+            </p>
           </div>
 
           {/* 3. Email */}

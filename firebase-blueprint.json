@@ -29,6 +29,18 @@
         "description": { "type": "string" }
       },
       "required": ["id", "userId", "type", "amount", "date", "status"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Application global settings",
+      "type": "object",
+      "properties": {
+        "apkDownloadUrl": { "type": "string" },
+        "whatsappLink": { "type": "string" },
+        "helplineNumber": { "type": "string" },
+        "appLogo": { "type": "string" },
+        "appName": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -39,6 +51,10 @@
     "/transactions/{transactionId}": {
       "schema": "Transaction",
       "description": "Global transaction history"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Global application settings"
     }
   }
 }

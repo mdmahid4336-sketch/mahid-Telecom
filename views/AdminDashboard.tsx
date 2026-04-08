@@ -4,9 +4,9 @@ import { db, auth, firebaseConfig } from '../firebase';
 import { initializeApp, getApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, setPersistence, inMemoryPersistence } from 'firebase/auth';
 import { collection, query, getDocs, getDoc, updateDoc, doc, onSnapshot, orderBy, limit, deleteDoc, setDoc, where } from 'firebase/firestore';
-import { User as UserType, Transaction } from '../types';
+import { User as UserType, Transaction, Notice } from '../types';
 import { handleFirestoreError, OperationType } from '../App';
-import { Users, CreditCard, Smartphone, CheckCircle2, XCircle, LogOut, Search, Filter, ArrowLeft, ShieldCheck, Clock, Trash2, UserPlus, Ban, Check, Edit2, Loader2 } from 'lucide-react';
+import { Users, CreditCard, Smartphone, CheckCircle2, XCircle, LogOut, Search, Filter, ArrowLeft, ShieldCheck, Clock, Trash2, UserPlus, Ban, Check, Edit2, Loader2, Megaphone, Copy } from 'lucide-react';
 import { APP_LOGO, APP_NAME, ACCOUNT_TYPES } from '../constants';
 
 interface AdminDashboardProps {
@@ -17,9 +17,21 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) => {
   const [users, setUsers] = useState<UserType[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'transactions'>('transactions');
+  const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'notice' | 'settings'>('transactions');
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState('');
+  const [isNoticeActive, setIsNoticeActive] = useState(true);
+
+  const [settings, setSettings] = useState({
+    apkDownloadUrl: '',
+    whatsappLink: '',
+    helplineNumber: '',
+    appName: '',
+    appLogo: ''
+  });
 
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
@@ -197,11 +209,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
       setIsLoading(false);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
+    // Listen for current notice
+    const unsubscribeNotice = onSnapshot(doc(db, 'notices', 'current'), (snap) => {
+      if (snap.exists()) {
+        const n = snap.data() as Notice;
+        setNotice(n);
+        setNoticeMessage(n.message);
+        setIsNoticeActive(n.isActive);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'notices/current'));
+
+    // Listen for settings
+    const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
+      if (snap.exists()) {
+        setSettings(snap.data() as any);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'settings/global'));
+
     return () => {
       unsubscribeTx();
       unsubscribeUsers();
+      unsubscribeNotice();
+      unsubscribeSettings();
     };
   }, []);
+
+  const handleUpdateNotice = async () => {
+    try {
+      await setDoc(doc(db, 'notices', 'current'), {
+        message: noticeMessage,
+        isActive: isNoticeActive,
+        updatedAt: new Date().toISOString()
+      });
+      showToast("Notice updated successfully!", 'success');
+    } catch (error) {
+      console.error("Error updating notice:", error);
+      showToast("Failed to update notice", 'error');
+    }
+  };
+
+  const handleUpdateSettings = async () => {
+    try {
+      await setDoc(doc(db, 'settings', 'global'), {
+        ...settings,
+        updatedAt: new Date().toISOString()
+      });
+      showToast("Settings updated successfully!", 'success');
+    } catch (error) {
+      console.error("Error updating settings:", error);
+      showToast("Failed to update settings", 'error');
+    }
+  };
 
   const handleUpdateStatus = async (txId: string, status: 'Success' | 'Failed', userId: string, amount: number, type: string) => {
     try {
@@ -211,15 +269,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
       // If it's an "Add Balance" and we mark as Success, update user balance
       if (status === 'Success' && type === 'Add Balance') {
         const userRef = doc(db, 'users', userId);
-        const userSnap = users.find(u => u.id === userId);
-        if (userSnap) {
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const currentBalance = userSnap.data().balance || 0;
           await updateDoc(userRef, {
-            balance: (userSnap.balance || 0) + amount
+            balance: currentBalance + amount
           });
         }
       }
       
-      showToast(`Transaction marked as ${status}`, 'success');
+      // If it's a deduction (Recharge, etc.) and we mark as Failed, refund user balance
+      if (status === 'Failed' && type !== 'Add Balance') {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const currentBalance = userSnap.data().balance || 0;
+          await updateDoc(userRef, {
+            balance: currentBalance + amount
+          });
+          showToast(`Transaction failed. Refunded ৳${amount} to user.`, 'success');
+        }
+      } else {
+        showToast(`Transaction marked as ${status}`, 'success');
+      }
     } catch (error) {
       console.error("Error updating transaction:", error);
       showToast("Failed to update transaction", 'error');
@@ -242,7 +314,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
       <div className="bg-indigo-900 p-5 flex items-center justify-between shadow-lg rounded-b-[2rem]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden">
-            <img src={APP_LOGO} alt={APP_NAME} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <img src={settings.appLogo} alt={settings.appName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <h1 className="text-white text-xl font-bold">Admin Panel</h1>
         </div>
@@ -284,20 +356,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-2">
           <button 
             onClick={() => setActiveTab('transactions')}
-            className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'transactions' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
+            className={`flex-1 min-w-[120px] py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'transactions' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
           >
             <CreditCard size={18} />
             Transactions
           </button>
           <button 
             onClick={() => setActiveTab('users')}
-            className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
+            className={`flex-1 min-w-[120px] py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
           >
             <Users size={18} />
             Users
+          </button>
+          <button 
+            onClick={() => setActiveTab('notice')}
+            className={`flex-1 min-w-[120px] py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'notice' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
+          >
+            <Megaphone size={18} />
+            Notice
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 min-w-[120px] py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
+          >
+            <ShieldCheck size={18} />
+            Settings
           </button>
         </div>
 
@@ -318,6 +404,139 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
             <p className="text-gray-400 font-medium">Loading data...</p>
+          </div>
+        ) : activeTab === 'notice' ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <Megaphone size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">System Notice</h3>
+                  <p className="text-xs text-gray-500">Update the scrolling notice for all users</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Notice Message</label>
+                <textarea 
+                  value={noticeMessage}
+                  onChange={(e) => setNoticeMessage(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[120px] text-gray-700"
+                  placeholder="Enter notice message here..."
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isNoticeActive ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-500'}`}>
+                    {isNoticeActive ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">Active Status</p>
+                    <p className="text-[10px] text-gray-500">Show or hide the notice</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsNoticeActive(!isNoticeActive)}
+                  className={`w-12 h-6 rounded-full transition-all relative ${isNoticeActive ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isNoticeActive ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              <button 
+                onClick={handleUpdateNotice}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+              >
+                <ShieldCheck size={20} />
+                Update Notice
+              </button>
+
+              {notice && (
+                <div className="pt-4 border-t border-gray-100">
+                  <p className="text-[10px] text-gray-400 text-center">
+                    Last updated: {new Date(notice.updatedAt).toLocaleString()}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : activeTab === 'settings' ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">App Settings</h3>
+                  <p className="text-xs text-gray-500">Manage links and app information</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">APK Download URL</label>
+                  <input 
+                    type="text"
+                    value={settings.apkDownloadUrl}
+                    onChange={(e) => setSettings({...settings, apkDownloadUrl: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="https://example.com/app.apk"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">WhatsApp Link</label>
+                  <input 
+                    type="text"
+                    value={settings.whatsappLink}
+                    onChange={(e) => setSettings({...settings, whatsappLink: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="https://wa.me/8801..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Helpline Number</label>
+                  <input 
+                    type="text"
+                    value={settings.helplineNumber}
+                    onChange={(e) => setSettings({...settings, helplineNumber: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="01920544401"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">App Name</label>
+                  <input 
+                    type="text"
+                    value={settings.appName}
+                    onChange={(e) => setSettings({...settings, appName: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="Mahid Telecom"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">App Logo URL</label>
+                  <input 
+                    type="text"
+                    value={settings.appLogo}
+                    onChange={(e) => setSettings({...settings, appLogo: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="https://picsum.photos/..."
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleUpdateSettings}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+              >
+                <ShieldCheck size={20} />
+                Save Settings
+              </button>
+            </div>
           </div>
         ) : activeTab === 'transactions' ? (
           <div className="space-y-4">
@@ -341,8 +560,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
                     <p className="text-lg font-black text-indigo-900">৳{tx.amount}</p>
                   </div>
                   
-                  <div className="bg-gray-50 p-3 rounded-xl">
+                  <div className="bg-gray-50 p-3 rounded-xl space-y-2">
                     <p className="text-xs text-gray-600 leading-relaxed font-medium">{tx.description}</p>
+                    {tx.txId && (
+                      <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-100">
+                        <p className="text-[10px] font-mono text-indigo-600 font-bold">TXID: {tx.txId}</p>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(tx.txId || '');
+                            showToast("TXID copied!", 'success');
+                          }}
+                          className="p-1 text-gray-400 hover:text-indigo-600"
+                        >
+                          <Copy size={12} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {tx.status === 'Pending' ? (

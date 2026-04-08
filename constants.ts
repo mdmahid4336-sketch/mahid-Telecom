@@ -1,9 +1,9 @@
 
 export const APP_NAME = "MAHID TELECOM";
-export const APP_LOGO = "https://ais-pre-r53huxwqypuqq7bksuiigm-58980864906.asia-southeast1.run.app/api/files/ais-pre-r53huxwqypuqq7bksuiigm-58980864906.asia-southeast1.run.app/1742739894819_mahid-telecom-final-logo.png";
+export const APP_LOGO = "https://picsum.photos/seed/mahidtelecom/512/512";
 export const HELPLINE_WHATSAPP = "01920544401";
 export const WHATSAPP_LINK = `https://wa.me/8801920544401`;
-export const APK_DOWNLOAD_URL = "https://example.com/mahid-telecom.apk";
+export const APK_DOWNLOAD_URL = "https://www.mahidtelecom.com"; // User's corrected website URL
 
 export const PAYMENT_NUMBERS = {
   NAGAD: "01920544401",

@@ -1,4 +1,11 @@
 
+export interface Notice {
+  id?: string;
+  message: string;
+  updatedAt: string;
+  isActive: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -29,6 +36,7 @@ export interface Transaction {
   date: string;
   status: 'Success' | 'Pending' | 'Failed';
   description: string;
+  txId?: string;
 }
 
 export enum PaymentMethod {
