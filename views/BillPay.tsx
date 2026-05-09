@@ -3,15 +3,16 @@ import React, { useState } from 'react';
 import { ArrowLeft, CreditCard, CheckCircle2 } from 'lucide-react';
 import { BILL_TYPES } from '../constants';
 
-import { Transaction } from '../types';
+import { Transaction, User as UserType } from '../types';
 
 interface BillPayProps {
+  user: UserType;
   onBack: () => void;
   onAddTransaction: (tx: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 }
 
-const BillPay: React.FC<BillPayProps> = ({ onBack, onAddTransaction, showToast }) => {
+const BillPay: React.FC<BillPayProps> = ({ user, onBack, onAddTransaction, showToast }) => {
   const [step, setStep] = useState(1);
   const [billType, setBillType] = useState(BILL_TYPES[0]);
   const [accNumber, setAccNumber] = useState('');
@@ -30,7 +31,7 @@ const BillPay: React.FC<BillPayProps> = ({ onBack, onAddTransaction, showToast }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length >= 4) {
+    if (pin === user.pin) {
       onAddTransaction({
         type: 'Bill Pay',
         amount: Number(amount),
@@ -38,7 +39,7 @@ const BillPay: React.FC<BillPayProps> = ({ onBack, onAddTransaction, showToast }
       });
       setSuccess(true);
     } else {
-      showToast("Please enter a valid PIN", 'error');
+      showToast("Incorrect PIN. Please try again.", 'error');
     }
   };
 

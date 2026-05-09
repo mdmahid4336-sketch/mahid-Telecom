@@ -3,7 +3,8 @@ export const APP_NAME = "MAHID TELECOM";
 export const APP_LOGO = "https://picsum.photos/seed/mahidtelecom/512/512";
 export const HELPLINE_WHATSAPP = "01920544401";
 export const WHATSAPP_LINK = `https://wa.me/8801920544401`;
-export const APK_DOWNLOAD_URL = "https://www.mahidtelecom.com"; // User's corrected website URL
+export const APK_DOWNLOAD_URL = "https://www.mahidtelecom.com"; 
+export const SHARE_URL = "https://www.mahidtelecom.com";
 
 export const PAYMENT_NUMBERS = {
   NAGAD: "01920544401",

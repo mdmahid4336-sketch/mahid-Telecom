@@ -6,7 +6,7 @@ import { getAuth, createUserWithEmailAndPassword, setPersistence, inMemoryPersis
 import { collection, query, getDocs, getDoc, updateDoc, doc, onSnapshot, orderBy, limit, deleteDoc, setDoc, where } from 'firebase/firestore';
 import { User as UserType, Transaction, Notice } from '../types';
 import { handleFirestoreError, OperationType } from '../App';
-import { Users, CreditCard, Smartphone, CheckCircle2, XCircle, LogOut, Search, Filter, ArrowLeft, ShieldCheck, Clock, Trash2, UserPlus, Ban, Check, Edit2, Loader2, Megaphone, Copy } from 'lucide-react';
+import { Users, CreditCard, Smartphone, CheckCircle2, XCircle, LogOut, Search, Filter, ArrowLeft, ShieldCheck, Clock, Trash2, UserPlus, Ban, Check, Edit2, Loader2, Megaphone, Copy, Zap, PlusCircle } from 'lucide-react';
 import { APP_LOGO, APP_NAME, ACCOUNT_TYPES } from '../constants';
 
 interface AdminDashboardProps {
@@ -17,7 +17,8 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) => {
   const [users, setUsers] = useState<UserType[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'notice' | 'settings'>('transactions');
+  const [packages, setPackages] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'packages' | 'notice' | 'settings'>('transactions');
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -30,7 +31,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
     whatsappLink: '',
     helplineNumber: '',
     appName: '',
-    appLogo: ''
+    appLogo: '',
+    shareUrl: ''
   });
 
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -38,6 +40,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
   const [newBalanceValue, setNewBalanceValue] = useState('');
   
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  
+  const [isAddPackageModalOpen, setIsAddPackageModalOpen] = useState(false);
+  const [editingPackage, setEditingPackage] = useState<any | null>(null);
+  const [newPackage, setNewPackage] = useState({
+    operator: 'Grameenphone',
+    title: '',
+    duration: '30 Days',
+    price: 0,
+    discount: 0,
+    finalPrice: 0,
+    isActive: true
+  });
   const [newUser, setNewUser] = useState({
     name: '',
     phone: '',
@@ -226,11 +240,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, 'settings/global'));
 
+    // Listen for packages
+    const unsubscribePackages = onSnapshot(collection(db, 'packages'), (snap) => {
+      const pList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPackages(pList);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'packages'));
+
     return () => {
       unsubscribeTx();
       unsubscribeUsers();
       unsubscribeNotice();
       unsubscribeSettings();
+      unsubscribePackages();
     };
   }, []);
 
@@ -258,6 +279,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
     } catch (error) {
       console.error("Error updating settings:", error);
       showToast("Failed to update settings", 'error');
+    }
+  };
+
+  const handleAddPackage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingPackage) {
+        await updateDoc(doc(db, 'packages', editingPackage.id), newPackage);
+        showToast("Package updated successfully!", 'success');
+      } else {
+        await setDoc(doc(collection(db, 'packages')), {
+          ...newPackage,
+          id: Date.now().toString(),
+          createdAt: new Date().toISOString()
+        });
+        showToast("Package added successfully!", 'success');
+      }
+      setIsAddPackageModalOpen(false);
+      setEditingPackage(null);
+      setNewPackage({ operator: 'Grameenphone', title: '', duration: '30 Days', price: 0, discount: 0, finalPrice: 0, isActive: true });
+    } catch (error) {
+      console.error("Error adding package:", error);
+      showToast("Failed to save package", 'error');
+    }
+  };
+
+  const handleDeletePackage = async (id: string) => {
+    if (confirm("Are you sure you want to delete this package?")) {
+      try {
+        await deleteDoc(doc(db, 'packages', id));
+        showToast("Package deleted!", 'success');
+      } catch (error) {
+        showToast("Failed to delete package", 'error');
+      }
     }
   };
 
@@ -372,6 +427,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
             Users
           </button>
           <button 
+            onClick={() => setActiveTab('packages')}
+            className={`flex-1 min-w-[120px] py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'packages' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
+          >
+            <Zap size={18} />
+            Packages
+          </button>
+          <button 
             onClick={() => setActiveTab('notice')}
             className={`flex-1 min-w-[120px] py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'notice' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-400 border border-gray-100'}`}
           >
@@ -394,6 +456,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
           >
             <UserPlus size={18} />
             Add New User
+          </button>
+        )}
+
+        {activeTab === 'packages' && (
+          <button 
+            onClick={() => {
+              setEditingPackage(null);
+              setNewPackage({ operator: 'Grameenphone', title: '', duration: '30 Days', price: 0, discount: 0, finalPrice: 0, isActive: true });
+              setIsAddPackageModalOpen(true);
+            }}
+            className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+          >
+            <PlusCircle size={18} />
+            Add New Package
           </button>
         )}
       </div>
@@ -527,6 +603,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
                     placeholder="https://picsum.photos/..."
                   />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">App Share Link</label>
+                  <input 
+                    type="text"
+                    value={settings.shareUrl}
+                    onChange={(e) => setSettings({...settings, shareUrl: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="https://example.com"
+                  />
+                </div>
               </div>
 
               <button 
@@ -537,6 +623,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
                 Save Settings
               </button>
             </div>
+          </div>
+        ) : activeTab === 'packages' ? (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {packages.length === 0 ? (
+              <div className="text-center py-10 bg-white rounded-3xl border border-dashed border-gray-300">
+                <p className="text-gray-400 italic">No packages yet. Add your first drive package!</p>
+              </div>
+            ) : (
+              packages.map(pkg => (
+                <div key={pkg.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-50 flex justify-between items-center">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{pkg.operator}</p>
+                    <h4 className="font-bold text-gray-800 text-sm">{pkg.title}</h4>
+                    <p className="text-[10px] text-gray-400">{pkg.duration} • ৳{pkg.price} (Comm: ৳{pkg.discount})</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setEditingPackage(pkg);
+                        setNewPackage(pkg);
+                        setIsAddPackageModalOpen(true);
+                      }}
+                      className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeletePackage(pkg.id)}
+                      className="p-2 bg-red-50 text-red-600 rounded-lg"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         ) : activeTab === 'transactions' ? (
           <div className="space-y-4">
@@ -833,6 +955,89 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, showToast }) 
                 >
                   {isLoading ? <Loader2 className="animate-spin" size={18} /> : 'Create User'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Package Modal */}
+      {isAddPackageModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 my-8 space-y-4 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-gray-900 text-center">{editingPackage ? 'Edit Package' : 'Add New Package'}</h3>
+            <form onSubmit={handleAddPackage} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Operator</label>
+                <select 
+                  value={newPackage.operator}
+                  onChange={(e) => setNewPackage({...newPackage, operator: e.target.value})}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl"
+                >
+                  {['Grameenphone', 'Robi', 'Banglalink', 'Airtel', 'Teletalk'].map(op => (
+                    <option key={op} value={op}>{op}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Package Title</label>
+                <input 
+                  type="text" required
+                  value={newPackage.title}
+                  onChange={(e) => setNewPackage({...newPackage, title: e.target.value})}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl"
+                  placeholder="Ex: 40GB + 800 Min"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Duration</label>
+                  <input 
+                    type="text" required
+                    value={newPackage.duration}
+                    onChange={(e) => setNewPackage({...newPackage, duration: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl"
+                    placeholder="30 Days"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Regular Price (৳)</label>
+                  <input 
+                    type="number" required
+                    value={newPackage.price}
+                    onChange={(e) => {
+                      const price = Number(e.target.value);
+                      setNewPackage({...newPackage, price, finalPrice: price - newPackage.discount});
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Discount/Commission (৳)</label>
+                  <input 
+                    type="number" required
+                    value={newPackage.discount}
+                    onChange={(e) => {
+                      const discount = Number(e.target.value);
+                      setNewPackage({...newPackage, discount, finalPrice: newPackage.price - discount});
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Final Offer Price (৳)</label>
+                  <input 
+                    type="number" required disabled
+                    value={newPackage.finalPrice}
+                    className="w-full px-4 py-3 bg-gray-100 border border-gray-100 rounded-xl font-bold text-indigo-600"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setIsAddPackageModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl">Cancel</button>
+                <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg ring-offset-2 hover:bg-indigo-700">Save Package</button>
               </div>
             </form>
           </div>

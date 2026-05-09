@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Smartphone, CheckCircle2, WifiOff, PhoneCall, Copy } from 'lucide-react';
 import { OPERATORS } from '../constants';
 
-import { AppView, Transaction } from '../types';
+import { AppView, Transaction, User as UserType } from '../types';
 
 const USSD_CODES = [
   { operator: 'Mahid Telecom', code: '*780#', label: 'General Service' },
@@ -20,13 +20,14 @@ const USSD_CODES = [
 ];
 
 interface MobileRechargeProps {
+  user: UserType;
   onBack: () => void;
   onAddTransaction: (tx: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
   showToast: (message: string, type: 'success' | 'error') => void;
   initialTab?: 'online' | 'offline';
 }
 
-const MobileRecharge: React.FC<MobileRechargeProps> = ({ onBack, onAddTransaction, showToast, initialTab = 'online' }) => {
+const MobileRecharge: React.FC<MobileRechargeProps> = ({ user, onBack, onAddTransaction, showToast, initialTab = 'online' }) => {
   const [activeTab, setActiveTab] = useState<'online' | 'offline'>(initialTab);
 
   useEffect(() => {
@@ -61,7 +62,7 @@ const MobileRecharge: React.FC<MobileRechargeProps> = ({ onBack, onAddTransactio
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length >= 4) {
+    if (pin === user.pin) {
       onAddTransaction({
         type: 'Recharge',
         amount: Number(amount),
@@ -69,7 +70,7 @@ const MobileRecharge: React.FC<MobileRechargeProps> = ({ onBack, onAddTransactio
       });
       setSuccess(true);
     } else {
-      showToast("Please enter a valid PIN", 'error');
+      showToast("Incorrect PIN. Please try again.", 'error');
     }
   };
 

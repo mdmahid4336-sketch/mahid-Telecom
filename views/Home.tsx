@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { AppView, User as UserType, Notice } from '../types';
+import { AppView, User as UserType, Notice, Transaction } from '../types';
 import { Smartphone, PlusCircle, CreditCard, Send, Share2, MessageSquare, Download, ChevronRight, Bell, Eye, EyeOff, Zap, Landmark, Building2, UserPlus, History, ShieldCheck, LogOut, Megaphone, PhoneCall } from 'lucide-react';
 import { APK_DOWNLOAD_URL, WHATSAPP_LINK } from '../constants';
 import { db } from '../firebase';
@@ -14,6 +14,7 @@ interface HomeViewProps {
   onLogout: () => void;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   notice: Notice | null;
+  history: Transaction[];
   settings: {
     apkDownloadUrl: string;
     whatsappLink: string;
@@ -23,7 +24,7 @@ interface HomeViewProps {
   };
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ user, setView, setRechargeTab, handleShare, onLogout, showToast, notice, settings }) => {
+const HomeView: React.FC<HomeViewProps> = ({ user, setView, setRechargeTab, handleShare, onLogout, showToast, notice, history, settings }) => {
   const [showBalance, setShowBalance] = useState(false);
   const [showSmartBanner, setShowSmartBanner] = useState(true);
 
@@ -174,6 +175,44 @@ const HomeView: React.FC<HomeViewProps> = ({ user, setView, setRechargeTab, hand
           ))}
         </div>
       </div>
+      
+      {/* Recent Activity */}
+      {history.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-lg font-bold text-gray-800">Recent Activity</h3>
+            <button 
+              onClick={() => setView('history')}
+              className="text-xs font-bold text-blue-600 hover:text-blue-700"
+            >
+              See All
+            </button>
+          </div>
+          <div className="space-y-3">
+            {history.slice(0, 3).map(tx => (
+              <div key={tx.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-50 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${tx.type === 'Add Balance' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600'}`}>
+                    {tx.type === 'Add Balance' ? <PlusCircle size={18} /> : (tx.type === 'Recharge' ? <Smartphone size={18} /> : <History size={18} />)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-800 text-sm">{tx.type}</p>
+                    <p className="text-[10px] text-gray-400 font-medium">{tx.date.split(',')[0]}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`font-black text-sm ${tx.type === 'Add Balance' ? 'text-green-600' : 'text-indigo-900'}`}>
+                    {tx.type === 'Add Balance' ? '+' : '-'} ৳{tx.amount}
+                  </p>
+                  <p className={`text-[10px] font-bold ${tx.status === 'Success' ? 'text-green-500' : (tx.status === 'Failed' ? 'text-red-500' : 'text-orange-500')}`}>
+                    {tx.status}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions / Contact */}
       <div className="space-y-4">

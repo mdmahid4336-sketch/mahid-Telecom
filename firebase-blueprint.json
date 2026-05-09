@@ -41,6 +41,22 @@
         "appLogo": { "type": "string" },
         "appName": { "type": "string" }
       }
+    },
+    "Package": {
+      "title": "Package",
+      "description": "Mobile drive or regular data/minute packages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "operator": { "type": "string" },
+        "title": { "type": "string" },
+        "duration": { "type": "string" },
+        "price": { "type": "number" },
+        "discount": { "type": "number" },
+        "finalPrice": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "operator", "title", "duration", "price", "finalPrice"]
     }
   },
   "firestore": {
@@ -55,6 +71,21 @@
     "/settings/{settingId}": {
       "schema": "Settings",
       "description": "Global application settings"
+    },
+    "/packages/{packageId}": {
+      "schema": "Package",
+      "description": "Mobile packages and drives"
+    },
+    "/notices/current": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "isActive": { "type": "boolean" },
+          "updatedAt": { "type": "string" }
+        }
+      },
+      "description": "Current system notice"
     }
   }
 }

@@ -2,15 +2,16 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Smartphone, Landmark, ShieldCheck, Info, CheckCircle2 } from 'lucide-react';
 
-import { Transaction } from '../types';
+import { Transaction, User as UserType } from '../types';
 
 interface MBankingProps {
+  user: UserType;
   onBack: () => void;
   onAddTransaction: (tx: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 }
 
-const MBanking: React.FC<MBankingProps> = ({ onBack, onAddTransaction, showToast }) => {
+const MBanking: React.FC<MBankingProps> = ({ user, onBack, onAddTransaction, showToast }) => {
   const [step, setStep] = useState(1);
   const [method, setMethod] = useState('');
   const [number, setNumber] = useState('');
@@ -37,7 +38,7 @@ const MBanking: React.FC<MBankingProps> = ({ onBack, onAddTransaction, showToast
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length >= 4) {
+    if (pin === user.pin) {
       onAddTransaction({
         type: 'M-Banking',
         amount: Number(amount),
@@ -45,7 +46,7 @@ const MBanking: React.FC<MBankingProps> = ({ onBack, onAddTransaction, showToast
       });
       setSuccess(true);
     } else {
-      showToast("Please enter a valid PIN", 'error');
+      showToast("Incorrect PIN. Please try again.", 'error');
     }
   };
 

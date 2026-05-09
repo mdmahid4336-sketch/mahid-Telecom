@@ -98,6 +98,8 @@ import ApiKey from './views/ApiKey';
 import MyDevice from './views/MyDevice';
 import AdminDashboard from './views/AdminDashboard';
 import EditProfile from './views/EditProfile';
+import HistoryView from './views/History';
+import ProfileView from './views/Profile';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>('login');
@@ -120,18 +122,32 @@ const App: React.FC = () => {
     whatsappLink: WHATSAPP_LINK,
     helplineNumber: HELPLINE_WHATSAPP,
     appName: APP_NAME,
-    appLogo: APP_LOGO
+    appLogo: APP_LOGO,
+    shareUrl: APK_DOWNLOAD_URL
   });
+
+  // Global error boundary state
+  const [errorHeader, setErrorHeader] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     // If it's a permission error, make it more user-friendly
     const friendlyMessage = message.includes('permission') 
       ? "Access Denied: You don't have permission to perform this action. Please check your account status."
-      : message;
+      : typeof message === 'string' ? message : "An unexpected error occurred.";
     
     setToast({ message: friendlyMessage, type });
     setTimeout(() => setToast(null), 5000);
   };
+
+  // Add global window error listener
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error("Global Error Caught:", event.error);
+      setErrorHeader(event.error?.message || "A runtime error occurred.");
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
 
   // Validate connection to Firestore
   useEffect(() => {
@@ -165,7 +181,8 @@ const App: React.FC = () => {
           whatsappLink: data.whatsappLink || WHATSAPP_LINK,
           helplineNumber: data.helplineNumber || HELPLINE_WHATSAPP,
           appName: data.appName || APP_NAME,
-          appLogo: data.appLogo || APP_LOGO
+          appLogo: data.appLogo || APP_LOGO,
+          shareUrl: data.shareUrl || APK_DOWNLOAD_URL
         });
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, 'settings/global'));
@@ -175,6 +192,17 @@ const App: React.FC = () => {
       unsubscribeSettings();
     };
   }, []);
+
+  // Safety timeout for loading state
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        console.warn("Loading timeout reached. Forcing interface to open.");
+        setIsLoading(false);
+      }, 5000); // 5 seconds safety net
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
 
   // Listen for Auth state changes
   useEffect(() => {
@@ -551,14 +579,15 @@ const App: React.FC = () => {
   };
 
   const handleShare = () => {
+    const url = settings.shareUrl || window.location.href;
     if (navigator.share) {
       navigator.share({
-        title: APP_NAME,
-        text: `Check out Mahid Telecom for easy recharge and bill pay!`,
-        url: window.location.href,
+        title: settings.appName,
+        text: `Check out ${settings.appName} for easy recharge and bill pay!`,
+        url: url,
       }).catch(console.error);
     } else {
-      showToast("Sharing not supported on this browser. Copy the URL instead.", 'error');
+      showToast("Sharing is not supported on this browser. Copy this URL: " + url, 'error');
     }
   };
 
@@ -568,14 +597,14 @@ const App: React.FC = () => {
 
     switch (view) {
       case 'admin-dashboard': return <AdminDashboard onLogout={handleLogout} showToast={showToast} />;
-      case 'home': return <HomeView user={user!} setView={setView} setRechargeTab={setRechargeTab} handleShare={handleShare} onLogout={handleLogout} showToast={showToast} />;
-      case 'recharge': return <MobileRecharge initialTab={rechargeTab} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'home': return <HomeView user={user!} history={history} setView={setView} setRechargeTab={setRechargeTab} handleShare={handleShare} onLogout={handleLogout} showToast={showToast} notice={notice} settings={settings} />;
+      case 'recharge': return <MobileRecharge user={user!} initialTab={rechargeTab} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
       case 'add-balance': return <AddBalance onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
-      case 'bill-pay': return <BillPay onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
-      case 'transfer': return <BalanceTransfer onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
-      case 'drive-packages': return <DrivePackages onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
-      case 'm-banking': return <MBanking onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
-      case 'b-banking': return <BBanking onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'bill-pay': return <BillPay user={user!} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'transfer': return <BalanceTransfer user={user!} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'drive-packages': return <DrivePackages user={user!} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'm-banking': return <MBanking user={user!} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
+      case 'b-banking': return <BBanking user={user!} onBack={() => setView('home')} onAddTransaction={addTransaction} showToast={showToast} />;
       case 'add-reseller': return <AddReseller onBack={() => setView('home')} onAddReseller={handleAddReseller} showToast={showToast} />;
       case 'notifications': return <Notifications onBack={() => setView('home')} />;
       case 'payment-gateway': return (
@@ -609,163 +638,10 @@ const App: React.FC = () => {
         return <ApiKey onBack={() => setView('profile')} showToast={showToast} />;
       case 'my-device': return <MyDevice onBack={() => setView('profile')} showToast={showToast} />;
       case 'edit-profile': return <EditProfile user={user!} onBack={() => setView('profile')} showToast={showToast} />;
-      case 'history': return (
-        <div className="p-4">
-          <h2 className="text-xl font-bold mb-4">Transaction History</h2>
-          <div className="space-y-3">
-            {history.map(tx => (
-              <div key={tx.id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center">
-                <div>
-                  <p className="font-semibold text-gray-800">{tx.type}</p>
-                  <p className="text-xs text-gray-500">{tx.date}</p>
-                  <p className="text-sm text-gray-600">{tx.description}</p>
-                </div>
-                <div className="text-right">
-                  <p className={`font-bold ${tx.type === 'Add Balance' ? 'text-green-600' : 'text-red-600'}`}>
-                    {tx.type === 'Add Balance' ? '+' : '-'} ৳{tx.amount}
-                  </p>
-                  <span className="text-[10px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full">{tx.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-      case 'profile': return (
-        <div className="p-6">
-          <div className="flex flex-col items-center mb-8">
-            <div 
-              className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mb-4 overflow-hidden border-4 border-white shadow-md cursor-pointer group relative"
-              onClick={() => setView('edit-profile')}
-            >
-              {user?.photoURL ? (
-                <img 
-                  src={user.photoURL} 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <User size={48} className="text-blue-600" />
-              )}
-              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                <Edit2 size={24} className="text-white" />
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold">{user?.name}</h2>
-            <p className="text-gray-500">{user?.phone}</p>
-            {user?.accountType && (
-              <span className="mt-2 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full border border-blue-100 uppercase tracking-wider">
-                {user.accountType}
-              </span>
-            )}
-            <button 
-              onClick={() => setView('edit-profile')}
-              className="mt-4 text-sm font-bold text-blue-600 flex items-center gap-1 hover:underline"
-            >
-              <Edit2 size={14} />
-              Edit Profile
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => setView('change-pin')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="bg-orange-100 p-2 rounded-lg text-orange-600">
-                    <KeyRound size={18} />
-                  </div>
-                  <span className="font-medium text-sm">Change PIN</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-              <button onClick={() => setView('change-password')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                    <ShieldCheck size={18} />
-                  </div>
-                  <span className="font-medium text-sm">Change Password</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-              <button onClick={() => setView('privacy-policy')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 p-2 rounded-lg text-gray-600">
-                    <ShieldCheck size={18} />
-                  </div>
-                  <span className="font-medium text-sm">Privacy Policy</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-              {user?.role === 'admin' && (
-                <button onClick={() => setView('api-key')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
-                      <KeyRound size={18} />
-                    </div>
-                    <span className="font-medium text-sm">API Key Configuration</span>
-                  </div>
-                  <ChevronRight size={18} className="text-gray-300" />
-                </button>
-              )}
-              <button onClick={() => setView('my-device')} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="bg-green-100 p-2 rounded-lg text-green-600">
-                    <Smartphone size={18} />
-                  </div>
-                  <span className="font-medium text-sm">My Device</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-            </div>
+      case 'history': return <HistoryView history={history} onBack={() => setView('home')} showToast={showToast} />;
+      case 'profile': return <ProfileView user={user!} onBack={() => setView('home')} onLogout={handleLogout} onNavigate={(v) => setView(v)} />;
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <button 
-                onClick={() => {
-                  if (!settings.apkDownloadUrl) {
-                    showToast("APK link is not yet configured. Please contact admin.", "error");
-                  } else {
-                    window.open(settings.apkDownloadUrl);
-                  }
-                }} 
-                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
-                    <Download size={18} />
-                  </div>
-                  <span className="font-medium text-sm">Download APK</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-              <button onClick={handleShare} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600">
-                    <Share2 size={18} />
-                  </div>
-                  <span className="font-medium text-sm">Share App</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-              <button onClick={() => window.open(settings.whatsappLink)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="bg-green-50 p-2 rounded-lg text-green-600">
-                    <MessageSquare size={18} />
-                  </div>
-                  <span className="font-medium text-sm">Contact WhatsApp</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300" />
-              </button>
-            </div>
-
-            <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 p-4 bg-red-50 text-red-600 rounded-2xl font-bold active:scale-95 transition-transform">
-              <LogOut size={20} />
-              <span>Logout Account</span>
-            </button>
-          </div>
-        </div>
-      );
-      default: return <HomeView user={user!} setView={setView} setRechargeTab={setRechargeTab} handleShare={handleShare} onLogout={handleLogout} showToast={showToast} notice={notice} settings={settings} />;
+      default: return <HomeView user={user!} history={history} setView={setView} setRechargeTab={setRechargeTab} handleShare={handleShare} onLogout={handleLogout} showToast={showToast} notice={notice} settings={settings} />;
     }
   };
 
@@ -799,12 +675,30 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="animate-in fade-in duration-300">
+        {errorHeader && (
+          <div className="absolute inset-0 z-[200] bg-red-600 text-white flex flex-col items-center justify-center p-8 text-center">
+            <AlertCircle size={64} className="mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Something went wrong</h2>
+            <p className="opacity-90 mb-6">{errorHeader}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="bg-white text-red-600 px-8 py-3 rounded-2xl font-bold shadow-lg"
+            >
+              Restart App
+            </button>
+          </div>
+        )}
         {isLoading ? (
-          <div className="min-h-screen flex flex-col items-center justify-center bg-blue-700 text-white">
-            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-xl overflow-hidden">
+          <div className="min-h-screen flex flex-col items-center justify-center bg-blue-700 text-white p-6 text-center">
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-6 shadow-2xl overflow-hidden border-4 border-white/20">
               <img src={settings.appLogo} alt={settings.appName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
-            <h1 className="text-2xl font-bold animate-pulse">{settings.appName}</h1>
+            <h1 className="text-3xl font-black tracking-tight mb-2">{settings.appName}</h1>
+            <p className="text-blue-100/60 text-sm font-medium animate-pulse uppercase tracking-[0.2em]">Loading System...</p>
+            
+            <div className="mt-12 w-48 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-full bg-white animate-[loading_2s_ease-in-out_infinite] w-1/2 rounded-full"></div>
+            </div>
           </div>
         ) : renderView()}
       </main>

@@ -11,11 +11,14 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  const distPath = path.resolve(process.cwd(), "dist");
+  const indexExists = fs.existsSync(path.join(distPath, "index.html"));
+
+  // API routes and middleware must come BEFORE Vite/Static
   app.use(express.json());
 
-  // API routes
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", message: "Mahid Telecom Backend is running!" });
+    res.json({ status: "ok", mode: indexExists ? "production" : "development" });
   });
 
   // Android App Link Verification
@@ -26,50 +29,21 @@ async function startServer() {
         target: {
           namespace: "android_app",
           package_name: "com.mahidtelecom.app",
-          sha256_cert_fingerprints: [
-            "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
-          ]
+          sha256_cert_fingerprints: ["00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"]
         }
       }
     ]);
   });
 
-  // Recharge API
-  app.post("/api/recharge", async (req, res) => {
-    const { phone, amount, operator, pin } = req.body;
-    const RECHARGE_API_KEY = process.env.RECHARGE_API_KEY;
-    
-    if (!RECHARGE_API_KEY) {
-      return res.status(500).json({ 
-        success: false, 
-        message: "Server configuration error: Recharge API key is missing." 
-      });
-    }
-
-    res.json({ 
-      success: true, 
-      transactionId: `TXN${Date.now()}`,
-      message: "Recharge request sent successfully!" 
-    });
-  });
-
-  const distPath = path.resolve(__dirname, "dist");
-  const indexExists = fs.existsSync(path.join(distPath, "index.html"));
-
+  // Catch-all but prioritizing existing files
   if (indexExists) {
-    console.log("Serving static files from dist...");
+    console.log("Serving from dist folder...");
     app.use(express.static(distPath));
-    
-    // SPA Fallback
-    app.use((req, res, next) => {
-      if (req.method === 'GET' && !req.path.startsWith('/api')) {
-        res.sendFile(path.join(distPath, "index.html"));
-      } else {
-        next();
-      }
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   } else {
-    console.log("Dist not found, using Vite middleware...");
+    console.log("Using Vite middleware...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

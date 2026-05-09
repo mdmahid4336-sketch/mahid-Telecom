@@ -20,10 +20,6 @@ export default defineConfig(({ mode }) => {
         cssMinify: true,
         rollupOptions: {
           output: {
-            manualChunks: {
-              vendor: ['react', 'react-dom', 'firebase/app', 'firebase/auth', 'firebase/firestore'],
-              ui: ['lucide-react', 'motion'],
-            },
             entryFileNames: 'assets/[name].js',
             chunkFileNames: 'assets/[name].js',
             assetFileNames: 'assets/[name].[ext]',

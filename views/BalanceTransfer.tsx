@@ -2,15 +2,16 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Send, CheckCircle2, Search } from 'lucide-react';
 
-import { Transaction } from '../types';
+import { Transaction, User as UserType } from '../types';
 
 interface BalanceTransferProps {
+  user: UserType;
   onBack: () => void;
   onAddTransaction: (tx: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 }
 
-const BalanceTransfer: React.FC<BalanceTransferProps> = ({ onBack, onAddTransaction, showToast }) => {
+const BalanceTransfer: React.FC<BalanceTransferProps> = ({ user, onBack, onAddTransaction, showToast }) => {
   const [step, setStep] = useState(1);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -28,7 +29,7 @@ const BalanceTransfer: React.FC<BalanceTransferProps> = ({ onBack, onAddTransact
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length >= 4) {
+    if (pin === user.pin) {
       onAddTransaction({
         type: 'Transfer',
         amount: Number(amount),
@@ -36,7 +37,7 @@ const BalanceTransfer: React.FC<BalanceTransferProps> = ({ onBack, onAddTransact
       });
       setSuccess(true);
     } else {
-      showToast("Please enter a valid PIN", 'error');
+      showToast("Incorrect PIN. Please try again.", 'error');
     }
   };
 
